@@ -5,14 +5,14 @@ import com.badlogic.gdx.audio.Sound;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
+import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
-import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator;
-import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator.FreeTypeFontParameter;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.Array;
 
 import pl.tomaszignaszak.game.FlappyBird;
 import pl.tomaszignaszak.game.sprites.Bird;
+import pl.tomaszignaszak.game.sprites.Font;
 import pl.tomaszignaszak.game.sprites.Scoring;
 import pl.tomaszignaszak.game.sprites.Tube;
 
@@ -28,10 +28,12 @@ public class PlayState extends State {
     private Texture ground;
     private Vector2 groundPos1, groundPos2;
     private Array<Tube> tubes;
-    private Sound crash;
+    private Sound crashSound;
     private Scoring scoring;
-    private BitmapFont score;
+    private BitmapFont scoreFont;
+    private BitmapFont maxScoreFont;
     private boolean stop;
+    private float speedRatio = 1.0f;
 
     protected PlayState(GameStateManager gsm) {
         super(gsm);
@@ -42,26 +44,16 @@ public class PlayState extends State {
         ground = new Texture("ground.png");
         groundPos1 = new Vector2(cam.position.x - cam.viewportWidth/2, GROUND_Y_OFFSET);
         groundPos2 = new Vector2((cam.position.x - cam.viewportWidth/2) + ground.getWidth(), GROUND_Y_OFFSET);
-        crash = Gdx.audio.newSound(Gdx.files.internal("crash.wav"));
+        crashSound = Gdx.audio.newSound(Gdx.files.internal("crash.wav"));
         scoring = new Scoring();
-        FreeTypeFontGenerator generator = new FreeTypeFontGenerator(Gdx.files.internal("font.ttf"));
-        FreeTypeFontParameter parameter = new FreeTypeFontParameter();
-        parameter.borderColor = Color.BLACK;
-        parameter.borderWidth = 1;
-        parameter.color = Color.WHITE;
-        parameter.size = 15;
-        score = generator.generateFont(parameter);
+        Font font = new Font();
+        scoreFont = font.getBitmap();
+        font.setColor(Color.GOLD);
+        font.setSize(Font.SIZE_BIG);
+        maxScoreFont = font.getBitmap();
         stop = false;
-
         for (int i = 1; i <= TUBE_COUNT; ++ i) {
             tubes.add(new Tube(i * (TUBE_SPACING + Tube.TUBE_WIDTH)));
-        }
-    }
-
-    @Override
-    protected void handleInput() {
-        if (Gdx.input.justTouched()) {
-            bird.jump();
         }
     }
 
@@ -69,6 +61,8 @@ public class PlayState extends State {
     public void update(float dt) {
         handleInput();
         updateGround();
+        dt = dt * speedRatio;
+
         if (! stop) bird.update(dt);
         cam.position.x = bird.getPosition().x + 80;
 
@@ -77,18 +71,14 @@ public class PlayState extends State {
             if (cam.position.x - (cam.viewportWidth/2) > tube.getPosTopTube().x + tube.getTopTube().getWidth()) {
                 tube.reposition(tube.getPosTopTube().x + ((Tube.TUBE_WIDTH + TUBE_SPACING)*TUBE_COUNT));
             }
-            if (tube.collides(bird.getBounds())) {
-                stop();
-            }
+            if (tube.collides(bird.getBounds())) stop();
             if(tube.score(bird.getBounds()) && ! tube.isScored()) {
                 scoring.score();
                 tube.markScored();
+                if (scoring.getScore() % 30 == 0) speedRatio += 0.1f;
             }
         }
-
-        if (bird.getPosition().y <= ground.getHeight() + GROUND_Y_OFFSET) {
-            stop();
-        }
+        if (bird.getPosition().y <= ground.getHeight() + GROUND_Y_OFFSET) stop();
         cam.update();
     }
 
@@ -104,7 +94,14 @@ public class PlayState extends State {
         }
         sb.draw(ground, groundPos1.x, groundPos1.y);
         sb.draw(ground, groundPos2.x, groundPos2.y);
-        score.draw(sb, "Score: " + Integer.toString(scoring.getScore()), cam.position.x - cam.viewportWidth/2 + 10, 20);
+        scoreFont.draw(sb, "Score: " + Integer.toString(scoring.getScore()), cam.position.x - cam.viewportWidth/2 + 10, 20);
+
+        if (scoring.isNewRecord() && ! scoring.isRecordMessageRead()) {
+            scoring.playRecordSound();
+            String maxScoreText = "RECORD";
+            GlyphLayout maxScoreGlyphLayout = new GlyphLayout(maxScoreFont, maxScoreText);
+            maxScoreFont.draw(sb, maxScoreText, cam.position.x - maxScoreGlyphLayout.width/2, cam.viewportHeight - 10);
+        }
 
         sb.end();
     }
@@ -115,11 +112,17 @@ public class PlayState extends State {
         bird.dispose();
         ground.dispose();
         scoring.dispose();
-        score.dispose();
+        scoreFont.dispose();
+        maxScoreFont.dispose();
         for (Tube tube: tubes) {
             tube.dispose();
         }
         System.out.println("Play State Disposed");
+    }
+
+    @Override
+    protected void handleInput() {
+        if (Gdx.input.justTouched()) bird.jump();
     }
 
     private void updateGround() {
@@ -132,10 +135,8 @@ public class PlayState extends State {
     }
 
     private void stop() {
-        if (! stop) crash.play();
+        if (! stop) crashSound.play();
         stop = true;
-        if (Gdx.input.justTouched()) {
-            gsm.set(new PlayState(gsm));
-        }
+        gsm.set(new InfoState(gsm, scoring));
     }
 }

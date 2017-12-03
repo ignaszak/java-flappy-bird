@@ -1,9 +1,9 @@
-package pl.tomaszignaszak.game.desktop;
+package net.ignaszak.game.desktop;
 
 import com.badlogic.gdx.backends.lwjgl.LwjglApplication;
 import com.badlogic.gdx.backends.lwjgl.LwjglApplicationConfiguration;
 
-import pl.tomaszignaszak.game.FlappyBird;
+import net.ignaszak.game.FlappyBird;
 
 public class DesktopLauncher {
     public static void main(String[] arg) {
